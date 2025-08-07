@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "log-whisperer"
+version = "0.1.0"
+description = "An AI log analyzer with chat interface"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+maintainers = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Debugging",
+    "Topic :: System :: Logging",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+keywords = ["log", "analysis", "ai", "chat", "langchain", "llm"]
+requires-python = ">=3.8"
+dependencies = [
+    "click>=8.0.0",
+    "langchain>=0.1.0",
+    "langchain-community>=0.0.1",
+    "pyyaml>=6.0",
+    "rich>=13.0.0",
+    "prompt-toolkit>=3.0.0",
+]
+
+[project.optional-dependencies]
+openai = ["langchain-openai"]
+anthropic = ["langchain-anthropic"]
+google = ["langchain-google-genai"]
+azure = ["langchain-openai"]
+cohere = ["langchain-cohere"]
+huggingface = ["langchain-huggingface"]
+ollama = ["langchain-ollama"]
+all = [
+    "langchain-openai",
+    "langchain-anthropic", 
+    "langchain-google-genai",
+    "langchain-cohere",
+    "langchain-huggingface",
+    "langchain-ollama",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/log-whisperer"
+Documentation = "https://github.com/yourusername/log-whisperer#readme"
+Repository = "https://github.com/yourusername/log-whisperer.git"
+"Bug Tracker" = "https://github.com/yourusername/log-whisperer/issues"
+
+[project.scripts]
+log-whisperer = "log_whisperer.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["log_whisperer*"]
+
+[tool.setuptools.package-data]
+log_whisperer = ["*.yaml", "*.yml"]
