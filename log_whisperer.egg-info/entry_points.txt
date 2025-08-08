@@ -1,0 +1,2 @@
+[console_scripts]
+log-whisperer = log_whisperer.cli:main
