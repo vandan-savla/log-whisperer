@@ -2,6 +2,7 @@
 LLM Factory for dynamic provider loading and chat model creation
 """
 import importlib
+import os
 import subprocess
 import sys
 from typing import Dict, Any, Optional
@@ -74,10 +75,27 @@ class LLMFactory:
         # Prepare initialization parameters
         init_params = {"model": model}
         
-        # Add required parameters
+        # Map required parameters to environment variable fallbacks
+        env_fallbacks = {
+            "openai": {"api_key": "OPENAI_API_KEY"},
+            "anthropic": {"api_key": "ANTHROPIC_API_KEY"},
+            "google": {"google_api_key": "GOOGLE_API_KEY"},
+            "cohere": {"cohere_api_key": "COHERE_API_KEY"},
+            "huggingface": {"huggingfacehub_api_token": "HUGGINGFACEHUB_API_TOKEN"},
+            "ollama": {},
+            "groq": {"groq_api_key": "GROQ_API_KEY"},
+        }
+
+        # Add required parameters with env var fallback (no secrets printed)
         for param in provider_info["required_params"]:
-            if param in config:
-                init_params[param] = config[param]
+            value = config.get(param)
+            if not value:
+                env_map = env_fallbacks.get(provider, {})
+                env_name = env_map.get(param)
+                if env_name:
+                    value = os.getenv(env_name)
+            if value:
+                init_params[param] = value
             else:
                 raise ValueError(f"Missing required parameter: {param}")
         

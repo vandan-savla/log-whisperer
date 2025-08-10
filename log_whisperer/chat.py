@@ -12,9 +12,18 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from prompt_toolkit import prompt
 from prompt_toolkit.history import FileHistory
-from langchain.memory import ConversationBufferMemory
 from langchain.schema import BaseMessage
 from langchain_core.messages import HumanMessage, AIMessage
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import FAISS
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.embeddings import FastEmbedEmbeddings
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains import create_retrieval_chain
+import hashlib
+from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_community.chat_message_histories import FileChatMessageHistory
 
 from .config import Config
 from .llm_factory import llm_factory
@@ -30,14 +39,19 @@ class LogAnalyzer:
         self.save_path = Path(save_path) if save_path else None
         self.config = Config()
         self.llm = None
-        self.memory = ConversationBufferMemory(return_messages=True)
         self.conversation_history = []
+        self.retriever = None
+        self.rag_chain = None
+        self.fallback_chain = None
+        self.session_id = self._compute_session_id()
         
         # Load log file content
         self.log_content = self._load_log_file()
         
         # Initialize LLM
         self._initialize_llm()
+        
+        # RAG chain will be initialized lazily on first use to speed startup
         
         # Load previous conversation if save path exists
         if self.save_path and self.save_path.exists():
@@ -80,12 +94,7 @@ class LogAnalyzer:
             
             self.conversation_history = data.get('conversation', [])
             
-            # Restore memory from conversation history
-            for entry in self.conversation_history:
-                if entry['type'] == 'human':
-                    self.memory.chat_memory.add_user_message(entry['content'])
-                elif entry['type'] == 'ai':
-                    self.memory.chat_memory.add_ai_message(entry['content'])
+            # Memory is derived on the fly from conversation_history; nothing else to do here
             
             console.print(f"[green]✓ Loaded previous conversation with {len(self.conversation_history)} messages[/green]")
             
@@ -113,27 +122,104 @@ class LogAnalyzer:
         except Exception as e:
             console.print(f"[red]Warning: Could not save conversation: {e}[/red]")
     
-    def _get_system_prompt(self) -> str:
-        """Generate system prompt with log content"""
-        return f"""You are an expert log analyst. You have been provided with a log file to analyze. 
-        Your job is to help the user understand the log content, identify issues, patterns, errors, and provide insights.
+    def _get_system_instructions(self) -> str:
+        """System instructions for the RAG chain (no full log in prompt)."""
+        with open("E:/Codes/AI/log-whisperer/log_whisperer/prompts/system_prompt.txt", "r") as f:
+            return f.read()
+    
+    def _compute_session_id(self) -> str:
+        digest = hashlib.sha256(str(self.log_file_path.resolve()).encode("utf-8")).hexdigest()[:12]
+        return f"session-{digest}"
+    
+    def _index_cache_dir(self) -> Path:
+        base = self.config.config_dir / "indexes"
+        base.mkdir(parents=True, exist_ok=True)
+        # Fingerprint by file path, size, mtime, and chunking/version params
+        stat = self.log_file_path.stat()
+        finger_str = json.dumps({
+            "path": str(self.log_file_path.resolve()),
+            "size": stat.st_size,
+            "mtime": int(stat.st_mtime),
+            "chunk_size": 2000,
+            "chunk_overlap": 200,
+            "embedding": "fastembed-bge-small-en-v1.5",
+            "version": 1,
+        }, sort_keys=True)
+        digest = hashlib.sha256(finger_str.encode("utf-8")).hexdigest()[:16]
+        return base / digest
 
-        LOG FILE PATH: {self.log_file_path}
+    def _messages_store_path(self) -> Path:
+        base = self.config.config_dir / "messages"
+        base.mkdir(parents=True, exist_ok=True)
+        return base / f"{self.session_id}.json"
 
-        LOG CONTENT:
-        ```
-        {self.log_content}
-        ```
+    def _get_chat_history(self, session_id: str) -> FileChatMessageHistory:
+        # Single-session per log file. Persist messages for agent memory only.
+        return FileChatMessageHistory(str(self._messages_store_path()))
 
-        Instructions:
-        - Analyze the log content thoroughly
-        - Provide clear, actionable insights
-        - Identify errors, warnings, and patterns
-        - Suggest solutions when possible
-        - Be concise but comprehensive
-        - If the user asks follow-up questions, maintain context from previous messages
-        - Focus on the most relevant information for the user's queries
-    """
+    def _initialize_rag(self, force_rebuild: bool = False) -> None:
+        """Create or load a vector store retriever and retrieval chain over the log file.
+
+        Lazy + cached: load FAISS if available, else build and persist.
+        """
+        try:
+            console.print("[yellow] Retrieving Embeddings...[/yellow]")
+            cache_dir = self._index_cache_dir()
+            # embeddings = FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
+            embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+
+            if cache_dir.exists() and not force_rebuild:
+                vector_store = FAISS.load_local(
+                    str(cache_dir), embeddings, allow_dangerous_deserialization=True
+                )
+            else:
+                splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200, add_start_index=True)
+
+                documents = splitter.create_documents(
+                    [self.log_content], metadatas=[{"source": str(self.log_file_path)}]
+                )
+                vector_store = FAISS.from_documents(documents, embeddings)
+                vector_store.save_local(str(cache_dir))
+
+            self.retriever = vector_store.as_retriever(search_kwargs={"k": 6})
+
+            # Prompt and retrieval chain with persisted chat history
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", "{system_instructions}\n\nRetrieved context:\n{context}"),
+                MessagesPlaceholder("history"),
+                ("human", "{input}")
+            ])
+            document_chain = create_stuff_documents_chain(self.llm, prompt)
+            base_chain = create_retrieval_chain(self.retriever, document_chain)
+            self.rag_chain = RunnableWithMessageHistory(
+                base_chain,
+                self._get_chat_history,
+                input_messages_key="input",
+                history_messages_key="history",
+                output_messages_key="answer",
+            )
+            console.print("[green]✓ Log are retrieved and ready to be analyzed[/green]")
+        except Exception as e:
+            console.print(f"[yellow]Warning: Failed to initialize Log retriever: {e}[/yellow]")
+            self.retriever = None
+            self.rag_chain = None
+
+    def _initialize_fallback_chain(self) -> None:
+        try:
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", "{system_instructions}"),
+                MessagesPlaceholder("history"),
+                ("human", "{input}")
+            ])
+            base_chain = prompt | self.llm
+            self.fallback_chain = RunnableWithMessageHistory(
+                base_chain,
+                self._get_chat_history,
+                input_messages_key="input",
+                history_messages_key="history",
+            )
+        except Exception:
+            self.fallback_chain = None
     
     def _format_response(self, response: str) -> None:
         """Format and display AI response"""
@@ -166,8 +252,9 @@ class LogAnalyzer:
             - "Are there any patterns or anomalies?"
             - "What happened around timestamp X?"
 
-            Type 'quit', 'exit', or press Ctrl+C to end the session.
+            Type '/quit', '/exit', or press Ctrl+C to end the session.
         """
+        self._initialize_rag()
         
         self._format_response(welcome_msg)
         
@@ -180,39 +267,46 @@ class LogAnalyzer:
                 try:
                     # Get user input
                     user_input = prompt(
-                        "\n[bold green]You:[/bold green] ",
+                        "You: ",
                         history=history
                     ).strip()
                     
                     if not user_input:
                         continue
                     
-                    if user_input.lower() in ['quit', 'exit', 'bye']:
+                    if user_input.lower() in ['/quit', '/exit']:
                         break
                     
                     # Add user message to history
                     self._add_to_history('human', user_input)
-                    self.memory.chat_memory.add_user_message(user_input)
                     
-                    # Prepare the full prompt with system context
-                    messages = [
-                        HumanMessage(content=self._get_system_prompt()),
-                        *self.memory.chat_memory.messages[-10:],  # Keep last 10 messages for context
-                    ]
-                    
-                    # Get AI response
+                    # Get AI response (RAG if available; fallback to direct LLM)
                     console.print("\n[dim]Analyzing...[/dim]")
-                    response = self.llm.invoke(messages)
-                    
-                    # Extract content from response
-                    if hasattr(response, 'content'):
-                        ai_response = response.content
+                    # if self.rag_chain is None:
+                    #     self._initialize_rag()
+
+                    if self.rag_chain is not None:
+                        result = self.rag_chain.invoke(
+                            {"input": user_input, "system_instructions": self._get_system_instructions()},
+                            config={"configurable": {"session_id": self.session_id}},
+                        )
+                        ai_response = result.get("answer") or str(result)
                     else:
-                        ai_response = str(response)
+                        # Fallback chain with persisted chat history
+                        if self.fallback_chain is None:
+                            self._initialize_fallback_chain()
+                        if self.fallback_chain is not None:
+                            response_msg = self.fallback_chain.invoke(
+                                {"input": user_input, "system_instructions": self._get_system_instructions()},
+                                config={"configurable": {"session_id": self.session_id}},
+                            )
+                            ai_response = getattr(response_msg, "content", str(response_msg))
+                        else:
+                            response = self.llm.invoke([HumanMessage(content=user_input)])
+                            ai_response = response.content if hasattr(response, "content") else str(response)
                     
-                    # Add AI response to history and memory
+                    # Add AI response to history
                     self._add_to_history('ai', ai_response)
-                    self.memory.chat_memory.add_ai_message(ai_response)
                     
                     # Display response
                     self._format_response(ai_response)
