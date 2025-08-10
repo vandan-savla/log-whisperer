@@ -18,12 +18,10 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.embeddings import FastEmbedEmbeddings
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain
 import hashlib
-from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_community.chat_message_histories import FileChatMessageHistory
 
 from .config import Config
 from .llm_factory import llm_factory
@@ -42,8 +40,6 @@ class LogAnalyzer:
         self.conversation_history = []
         self.retriever = None
         self.rag_chain = None
-        self.fallback_chain = None
-        self.session_id = self._compute_session_id()
         
         # Load log file content
         self.log_content = self._load_log_file()
@@ -127,10 +123,6 @@ class LogAnalyzer:
         with open("E:/Codes/AI/log-whisperer/log_whisperer/prompts/system_prompt.txt", "r") as f:
             return f.read()
     
-    def _compute_session_id(self) -> str:
-        digest = hashlib.sha256(str(self.log_file_path.resolve()).encode("utf-8")).hexdigest()[:12]
-        return f"session-{digest}"
-    
     def _index_cache_dir(self) -> Path:
         base = self.config.config_dir / "indexes"
         base.mkdir(parents=True, exist_ok=True)
@@ -147,15 +139,6 @@ class LogAnalyzer:
         }, sort_keys=True)
         digest = hashlib.sha256(finger_str.encode("utf-8")).hexdigest()[:16]
         return base / digest
-
-    def _messages_store_path(self) -> Path:
-        base = self.config.config_dir / "messages"
-        base.mkdir(parents=True, exist_ok=True)
-        return base / f"{self.session_id}.json"
-
-    def _get_chat_history(self, session_id: str) -> FileChatMessageHistory:
-        # Single-session per log file. Persist messages for agent memory only.
-        return FileChatMessageHistory(str(self._messages_store_path()))
 
     def _initialize_rag(self, force_rebuild: bool = False) -> None:
         """Create or load a vector store retriever and retrieval chain over the log file.
@@ -183,43 +166,18 @@ class LogAnalyzer:
 
             self.retriever = vector_store.as_retriever(search_kwargs={"k": 6})
 
-            # Prompt and retrieval chain with persisted chat history
+            # Prompt and retrieval chain
             prompt = ChatPromptTemplate.from_messages([
                 ("system", "{system_instructions}\n\nRetrieved context:\n{context}"),
-                MessagesPlaceholder("history"),
-                ("human", "{input}")
+                ("human", "This is user query - {input}. ")
             ])
             document_chain = create_stuff_documents_chain(self.llm, prompt)
-            base_chain = create_retrieval_chain(self.retriever, document_chain)
-            self.rag_chain = RunnableWithMessageHistory(
-                base_chain,
-                self._get_chat_history,
-                input_messages_key="input",
-                history_messages_key="history",
-                output_messages_key="answer",
-            )
+            self.rag_chain = create_retrieval_chain(self.retriever, document_chain)
             console.print("[green]✓ Log are retrieved and ready to be analyzed[/green]")
         except Exception as e:
             console.print(f"[yellow]Warning: Failed to initialize Log retriever: {e}[/yellow]")
             self.retriever = None
             self.rag_chain = None
-
-    def _initialize_fallback_chain(self) -> None:
-        try:
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", "{system_instructions}"),
-                MessagesPlaceholder("history"),
-                ("human", "{input}")
-            ])
-            base_chain = prompt | self.llm
-            self.fallback_chain = RunnableWithMessageHistory(
-                base_chain,
-                self._get_chat_history,
-                input_messages_key="input",
-                history_messages_key="history",
-            )
-        except Exception:
-            self.fallback_chain = None
     
     def _format_response(self, response: str) -> None:
         """Format and display AI response"""
@@ -286,24 +244,22 @@ class LogAnalyzer:
                     #     self._initialize_rag()
 
                     if self.rag_chain is not None:
-                        result = self.rag_chain.invoke(
-                            {"input": user_input, "system_instructions": self._get_system_instructions()},
-                            config={"configurable": {"session_id": self.session_id}},
-                        )
+                        result = self.rag_chain.invoke({
+                            "input": user_input,
+                            "system_instructions": self._get_system_instructions(),
+                        })
                         ai_response = result.get("answer") or str(result)
                     else:
-                        # Fallback chain with persisted chat history
-                        if self.fallback_chain is None:
-                            self._initialize_fallback_chain()
-                        if self.fallback_chain is not None:
-                            response_msg = self.fallback_chain.invoke(
-                                {"input": user_input, "system_instructions": self._get_system_instructions()},
-                                config={"configurable": {"session_id": self.session_id}},
-                            )
-                            ai_response = getattr(response_msg, "content", str(response_msg))
-                        else:
-                            response = self.llm.invoke([HumanMessage(content=user_input)])
-                            ai_response = response.content if hasattr(response, "content") else str(response)
+                        # Fallback: direct invocation with minimal context
+                        recent_messages: List[BaseMessage] = []
+                        for entry in self.conversation_history[-10:]:
+                            if entry['type'] == 'human':
+                                recent_messages.append(HumanMessage(content=entry['content']))
+                            elif entry['type'] == 'ai':
+                                recent_messages.append(AIMessage(content=entry['content']))
+                        messages = [HumanMessage(content=self._get_system_instructions()), *recent_messages, HumanMessage(content=user_input)]
+                        response = self.llm.invoke(messages)
+                        ai_response = response.content if hasattr(response, "content") else str(response)
                     
                     # Add AI response to history
                     self._add_to_history('ai', ai_response)
