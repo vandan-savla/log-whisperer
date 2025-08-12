@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/Python-3.10%20|%203.11%20|%203.12%20|%203.13-blue)
 [![OS](https://img.shields.io/badge/OS-Windows%20|%20macOS%20|%20Linux-555)](#)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](#-development)
+
 
 Log Whisperer is a CLI-first assistant that helps you explore, summarize, and reason about application logs through a conversational interface. Point it at a log file, ask questions, and iterate quickly.
 
