@@ -90,15 +90,11 @@ log-whisperer status
 log-whisperer chat --log-file /path/to/app.log --save ~/.log-whisperer/last-session.json
 ```
 
-During configuration, you’ll be prompted for provider credentials and model. Supported providers and example environment variables:
-
+During configuration, you’ll be prompted for provider credentials and model. Supported providers are: 
 - OpenAI: `OPENAI_API_KEY`
 - Anthropic: `ANTHROPIC_API_KEY`
 - Google: `GOOGLE_API_KEY`
 - Groq: `GROQ_API_KEY`
-
-If you prefer, you can skip entering secrets interactively and rely on the environment variables above.
-
 ---
 
 ## Commands
