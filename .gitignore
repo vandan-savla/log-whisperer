@@ -11,4 +11,4 @@ __pycache__/
 *.pyzwzwz
 *.env
 .*
-log-whisperer.egg-info/
+*.egg*
