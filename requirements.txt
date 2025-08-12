@@ -11,3 +11,4 @@ sentence-transformers
 tiktoken
 faiss-cpu
 numpy
+pytest
