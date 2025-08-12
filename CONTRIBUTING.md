@@ -13,7 +13,10 @@ By participating, you agree to uphold a respectful and inclusive environment. Be
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate   # Windows: .\.venv\Scripts\Activate.ps1
+source .venv/bin/activate
+# Windows:
+.\.venv\Scripts\Activate.ps1
+
 pip install -U pip setuptools wheel
 pip install -e .
 ```
