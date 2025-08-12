@@ -46,9 +46,7 @@ setup(
         "anthropic": ["langchain-anthropic"],
         "google": ["langchain-google-genai"],
         "azure": ["langchain-openai"],
-        "cohere": ["langchain-cohere"],
-        "huggingface": ["langchain-huggingface"],
-        "ollama": ["langchain-ollama"],
+
     },
     entry_points={
         "console_scripts": [

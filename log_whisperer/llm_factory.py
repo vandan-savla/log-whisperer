@@ -80,9 +80,6 @@ class LLMFactory:
             "openai": {"api_key": "OPENAI_API_KEY"},
             "anthropic": {"api_key": "ANTHROPIC_API_KEY"},
             "google": {"google_api_key": "GOOGLE_API_KEY"},
-            "cohere": {"cohere_api_key": "COHERE_API_KEY"},
-            "huggingface": {"huggingfacehub_api_token": "HUGGINGFACEHUB_API_TOKEN"},
-            "ollama": {},
             "groq": {"groq_api_key": "GROQ_API_KEY"},
         }
 
@@ -113,10 +110,6 @@ class LLMFactory:
             # Anthropic uses anthropic_api_key parameter name
             if "api_key" in init_params:
                 init_params["anthropic_api_key"] = init_params.pop("api_key")
-        elif provider == "ollama":
-            # Ollama doesn't need API key and might need base_url
-            if "base_url" in config:
-                init_params["base_url"] = config["base_url"]
         
         try:
             return llm_class(**init_params)

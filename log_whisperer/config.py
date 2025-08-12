@@ -73,24 +73,6 @@ SUPPORTED_PROVIDERS = {
         "required_params": ["google_api_key"],
         "optional_params": ["temperature", "max_output_tokens", "top_p"]
     },
-    "cohere": {
-        "package": "langchain-cohere", 
-        "class": "ChatCohere",
-        "required_params": ["cohere_api_key"],
-        "optional_params": ["temperature", "max_tokens", "p"]
-    },
-    "huggingface": {
-        "package": "langchain-huggingface", 
-        "class": "ChatHuggingFace",
-        "required_params": ["huggingfacehub_api_token"],
-        "optional_params": ["temperature", "max_new_tokens", "top_p"]
-    },
-    "ollama": {
-        "package": "langchain-ollama", 
-        "class": "ChatOllama",
-        "required_params": [],
-        "optional_params": ["temperature", "num_predict", "top_p"]
-    },
     "groq": {
         "package": "langchain-groq", 
         "class": "ChatGroq",

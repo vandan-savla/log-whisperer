@@ -42,9 +42,6 @@ def configure():
         "openai": "OpenAI GPT models (GPT-3.5, GPT-4, etc.)",
         "anthropic": "Anthropic Claude models",
         "google": "Google Gemini models",
-        "cohere": "Cohere Command models", 
-        "huggingface": "Hugging Face Hub models",
-        "ollama": "Local Ollama models",
         "groq": "Groq models"
     }
     
@@ -71,9 +68,6 @@ def configure():
         "openai": "gpt-3.5-turbo, gpt-4, gpt-4-turbo, etc",
         "anthropic": "claude-3-sonnet-20240229, claude-3-haiku-20240307, etc",
         "google": "gemini-pro, gemini-pro-vision, etc",
-        "cohere": "command, command-nightly, etc",
-        "huggingface": "microsoft/DialoGPT-medium, meta-llama/Llama-2-7b-chat-hf, etc",
-        "ollama": "llama2, mistral, codellama, etc",
         "groq": "llama3-8b-8192, llama3-70b-8192, etc"
     }
     
@@ -170,16 +164,7 @@ def configure():
             console.print(f"[yellow]Invalid input for {param}, skipping...[/yellow]")
             continue
     
-    # Special handling for Ollama base URL
-    if provider == "ollama":
-        base_url = click.prompt(
-            "Base URL (e.g., http://localhost:11434)",
-            default="http://localhost:11434",
-            show_default=True
-        )
-        if base_url:
-            provider_config["base_url"] = base_url
-    
+
     # Test the configuration
     console.print("\n[yellow]Testing configuration...[/yellow]")
     try:
@@ -269,7 +254,8 @@ def reset():
     if click.confirm("Are you sure you want to reset all configuration?"):
         try:
             config.config_file.unlink(missing_ok=True)
-            console.print("[green]✓ Configuration reset successfully.[/green]")
+            console.print("[green]✓ Configuration reset successfully. [/green]")
+            console.print("[yellow]Reconfigure using log-whisperer configure[/yellow]")
         except Exception as e:
             console.print(f"[red]✗ Error resetting configuration: {e}[/red]")
 
