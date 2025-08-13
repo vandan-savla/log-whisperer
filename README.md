@@ -22,7 +22,9 @@ This project uses LangChain under the hood and supports multiple LLM providers (
 
 > Tip: Add your own screenshots or GIFs later under `docs/assets/` and replace the placeholders below.
 
-![Hero placeholder](docs/assets/log-whisperer%20demo%20video.mp4)
+<iframe width="560" height="315" src="docs/assets/log-whisperer%20demo%20video.mp4" frameborder="0" ></iframe>
+
+<!-- ![Hero placeholder]() -->
 
 ---
 
