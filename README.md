@@ -22,7 +22,7 @@ This project uses LangChain under the hood and supports multiple LLM providers (
 
 > Tip: Add your own screenshots or GIFs later under `docs/assets/` and replace the placeholders below.
 
-![Hero placeholder](https://img.shields.io/badge/Log%20Whisperer-Demo-6f42c1?logo=github)
+![Hero placeholder](docs/assets/log-whisperer%20demo%20video.mp4)
 
 ---
 
