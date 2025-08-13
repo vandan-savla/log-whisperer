@@ -20,9 +20,13 @@ This project uses LangChain under the hood and supports multiple LLM providers (
 
 ### Demo
 
+
+
+
+
 > Tip: Add your own screenshots or GIFs later under `docs/assets/` and replace the placeholders below.
 
-![Hero placeholder](https://raw.githubusercontent.com/vandan-savla/log-whisperer/main/docs/assets/log-whisperer_demo_video.mp4)
+![Hero placeholder]([https://raw.githubusercontent.com/vandan-savla/log-whisperer/main/docs/assets/log-whisperer_demo_video.mp4](https://github.com/user-attachments/assets/3c923a8f-0d30-434b-b051-9b44fdfe9a59)
 
 --- 
 
